@@ -46,10 +46,11 @@
 
     - name: Ensure pg_users list exists for the cluster
       ansible.builtin.set_fact:
-        pigsty_config: "{{ pigsty_config | combine(
-          {'all': {'children': {pg_cluster_name: {'vars': {'pg_users': []}}}}},
-          recursive=True
-        ) }}"
+        pigsty_config: |
+          {{ pigsty_config | combine(
+            {'all': {'children': {pg_cluster_name: {'vars': {'pg_users': []}}}}},
+            recursive=True
+          ) }}
       when: pigsty_config.all.children[pg_cluster_name].vars.pg_users is not defined
 
     - name: Prepare new user entry
@@ -67,12 +68,13 @@
 
     - name: Add new user to pigsty_config if not present
       ansible.builtin.set_fact:
-        pigsty_config: "{{ pigsty_config | combine(
-          {'all': {'children': {pg_cluster_name: {'vars': {'pg_users':
-            (pigsty_config.all.children[pg_cluster_name].vars.pg_users | default([])) + [new_user_entry]
-          }}}}},
-          recursive=True
-        ) }}"
+        pigsty_config: |
+          {{ pigsty_config | combine(
+            {'all': {'children': {pg_cluster_name: {'vars': {'pg_users':
+              (pigsty_config.all.children[pg_cluster_name].vars.pg_users | default([])) + [new_user_entry]
+            }}}}},
+            recursive=True
+          ) }}
       when: new_user_entry is defined # Only add if new_user_entry was prepared (i.e., user not already present)
 
     - name: Write updated pigsty.yml back to remote server
