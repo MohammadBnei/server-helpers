@@ -3,8 +3,8 @@
   hosts: dserver
   # become: yes # Removed as per request
   vars:
-    pigsty_config_path: "/path/to/your/pigsty.yml" # IMPORTANT: Set the actual path to pigsty.yml on dserver
-    pg_cluster_name: "pg-test" # Replace with your actual Pigsty cluster name
+    pigsty_config_path: "/home/mohammad/k8s-vms/pigsty/pigsty_git/pigsty.yml" # IMPORTANT: Set the actual path to pigsty.yml on dserver
+    pg_cluster_name: "pg-meta" # Replace with your actual Pigsty cluster name
     new_pg_user: "my_app_user" # The new user to create
     new_pg_password: "my_secure_password" # The password for the new user
     new_pg_database: "my_app_db" # The new database to create
