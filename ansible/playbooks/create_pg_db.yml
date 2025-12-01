@@ -23,18 +23,17 @@
 
   tasks:
     - name: Check if database '{{ new_pg_database }}' already exists in pigsty.yml
-      ansible.builtin.lineinfile:
-        path: "{{ pigsty_file_location }}"
-        regexp: '^- \{ name: "{{ new_pg_database }}"' # Regex to match the database entry
-        state: present
+      ansible.builtin.shell: >
+        grep -iq "name: {{ new_pg_database }}" {{ pigsty_file_location }}
       register: db_exists_check
-      check_mode: yes # Do not make changes, just check
       delegate_to: dserver
+      changed_when: false
+      failed_when: false # grep returns 1 if not found, which is not a failure for us
 
     - name: Fail if database already exists
       ansible.builtin.fail:
         msg: "Database '{{ new_pg_database }}' already exists in {{ pigsty_file_location }}. Aborting."
-      when: db_exists_check.found
+      when: db_exists_check.rc == 0 # rc=0 means grep found the pattern
 
     - name: Prepare extensions list
       ansible.builtin.set_fact:
