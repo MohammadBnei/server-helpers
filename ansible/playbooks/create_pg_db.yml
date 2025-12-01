@@ -48,7 +48,7 @@
       delegate_to: dserver
 
     - name: Run Pigsty command to create database
-      ansible.builtin.command: "bin/pgsql-db pg-meta {{ new_pg_database }} {{ db_owner_user }}"
+      ansible.builtin.command: "bin/pgsql-db pg-meta {{ new_pg_database }}"
       args:
         chdir: "{{ pigsty_config_path }}"
       delegate_to: dserver
