@@ -2,9 +2,9 @@
 - name: Create PostgreSQL user via pigsty.yml
   hosts: dserver
   vars:
-    pigsty_config_path: "/home/mohammad/k8s-vms/pigsty/pigsty_git" # IMPORTANT: Set the actual path to pigsty.yml on dserver
+    pigsty_config_path: "/home/mohammad/k8s-vms/pigsty/pigsty_git" # Base path to Pigsty installation
+    pigsty_file_location: "{{ pigsty_config_path }}/pigsty.yml" # Full path to pigsty.yml
     pg_cluster_name: "pg-meta" # Replace with your actual Pigsty cluster name
-    pigsty_file_location: "{{ pigsty_config_path }}/pigsty.yml"
   vars_prompt:
     - name: "new_pg_user"
       prompt: "Enter the new PostgreSQL username to create"
@@ -24,9 +24,22 @@
       ansible.builtin.set_fact:
         pigsty_config: "{{ pigsty_yml_content['content'] | b64decode | from_yaml }}"
 
+    - name: Ensure pg_users list exists for the cluster
+      ansible.builtin.set_fact:
+        pigsty_config: "{{ pigsty_config | combine(
+          {'all': {'children': {pg_cluster_name: {'vars': {'pg_users': []}}}}},
+          recursive=True
+        ) }}"
+      when: pigsty_config.all.children[pg_cluster_name].vars.pg_users is not defined
+
     - name: Add new user to pigsty_config if not present
       ansible.builtin.set_fact:
-        pigsty_config: "{{ pigsty_config | combine({'all': {'vars': {'pg_users': (pigsty_config.all.vars.pg_users | default([])) + [new_user_entry]}}}) }}"
+        pigsty_config: "{{ pigsty_config | combine(
+          {'all': {'children': {pg_cluster_name: {'vars': {'pg_users':
+            (pigsty_config.all.children[pg_cluster_name].vars.pg_users | default([])) + [new_user_entry]
+          }}}}},
+          recursive=True
+        ) }}"
       vars:
         new_user_entry:
           name: "{{ new_pg_user }}"
@@ -36,9 +49,7 @@
             - LOGIN
             - CREATEDB
             - REPLICATION
-      when: >
-        pigsty_config.all.vars.pg_users is not defined or
-        not (pigsty_config.all.vars.pg_users | selectattr('name', 'equalto', new_pg_user) | list)
+      when: not (pigsty_config.all.children[pg_cluster_name].vars.pg_users | selectattr('name', 'equalto', new_pg_user) | list)
 
     - name: Write updated pigsty.yml back to remote server
       ansible.builtin.copy:
@@ -47,8 +58,8 @@
         mode: '0644'
       delegate_to: dserver
 
-    - name: Run Pigsty deploy to apply changes
-      ansible.builtin.command: "bin/pgsql-user pg-meta {{ new_pg_user }}"
+    - name: Run Pigsty command to create user
+      ansible.builtin.command: "bin/pgsql-user {{ pg_cluster_name }} {{ new_pg_user }}"
       args:
         chdir: "{{ pigsty_config_path }}"
       delegate_to: dserver

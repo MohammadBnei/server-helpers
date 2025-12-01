@@ -24,9 +24,22 @@
       ansible.builtin.set_fact:
         pigsty_config: "{{ pigsty_yml_content['content'] | b64decode | from_yaml }}"
 
+    - name: Ensure pg_databases list exists for the cluster
+      ansible.builtin.set_fact:
+        pigsty_config: "{{ pigsty_config | combine(
+          {'all': {'children': {pg_cluster_name: {'vars': {'pg_databases': []}}}}},
+          recursive=True
+        ) }}"
+      when: pigsty_config.all.children[pg_cluster_name].vars.pg_databases is not defined
+
     - name: Add new database to pigsty_config if not present
       ansible.builtin.set_fact:
-        pigsty_config: "{{ pigsty_config | combine({'all': {'vars': {'pg_databases': (pigsty_config.all.vars.pg_databases | default([])) + [new_db_entry]}}}) }}"
+        pigsty_config: "{{ pigsty_config | combine(
+          {'all': {'children': {pg_cluster_name: {'vars': {'pg_databases':
+            (pigsty_config.all.children[pg_cluster_name].vars.pg_databases | default([])) + [new_db_entry]
+          }}}}},
+          recursive=True
+        ) }}"
       vars:
         new_db_entry:
           name: "{{ new_pg_database }}"
@@ -36,9 +49,7 @@
           lc_ctype: en_US.UTF-8
           template: template0
           state: present
-      when: >
-        pigsty_config.all.vars.pg_databases is not defined or
-        not (pigsty_config.all.vars.pg_databases | selectattr('name', 'equalto', new_pg_database) | list)
+      when: not (pigsty_config.all.children[pg_cluster_name].vars.pg_databases | selectattr('name', 'equalto', new_pg_database) | list)
 
     - name: Write updated pigsty.yml back to remote server
       ansible.builtin.copy:
@@ -48,7 +59,7 @@
       delegate_to: dserver
 
     - name: Run Pigsty command to create database
-      ansible.builtin.command: "bin/pgsql-db pg-meta {{ new_pg_database }}"
+      ansible.builtin.command: "bin/pgsql-db {{ pg_cluster_name }} {{ new_pg_database }}"
       args:
         chdir: "{{ pigsty_config_path }}"
       delegate_to: dserver
