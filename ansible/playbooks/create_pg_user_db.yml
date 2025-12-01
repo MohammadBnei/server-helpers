@@ -1,7 +1,7 @@
 ---
 - name: Create PostgreSQL user and database via pigsty.yml
   hosts: dserver
-  become: yes
+  # become: yes # Removed as per request
   vars:
     pigsty_config_path: "/path/to/your/pigsty.yml" # IMPORTANT: Set the actual path to pigsty.yml on dserver
     pg_cluster_name: "pg-test" # Replace with your actual Pigsty cluster name
