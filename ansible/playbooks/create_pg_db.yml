@@ -12,6 +12,14 @@
     - name: "db_owner_user"
       prompt: "Enter the owner username for the new PostgreSQL database (must exist)"
       private: false
+    - name: "db_comment"
+      prompt: "Enter a comment for the new database (optional, leave blank for none)"
+      private: false
+      default: ""
+    - name: "db_extensions_input"
+      prompt: "Enter comma-separated extensions (e.g., 'vector,pg_stat_statements', leave blank for none)"
+      private: false
+      default: ""
 
   tasks:
     - name: Read existing pigsty.yml from remote server
@@ -32,6 +40,25 @@
         ) }}"
       when: pigsty_config.all.children[pg_cluster_name].vars.pg_databases is not defined
 
+    - name: Prepare extensions list
+      ansible.builtin.set_fact:
+        parsed_extensions: "{{ db_extensions_input.split(',') | map('trim') | select('length') | map('community.general.dict_from_keys', ['name']) | list }}"
+      when: db_extensions_input | length > 0
+
+    - name: Prepare new database entry
+      ansible.builtin.set_fact:
+        new_db_entry:
+          name: "{{ new_pg_database }}"
+          owner: "{{ db_owner_user }}"
+          comment: "{{ db_comment if db_comment | length > 0 else omit }}"
+          encoding: UTF8
+          lc_collate: en_US.UTF-8
+          lc_ctype: en_US.UTF-8
+          template: template0
+          state: present
+          extensions: "{{ parsed_extensions if parsed_extensions is defined else omit }}"
+      when: not (pigsty_config.all.children[pg_cluster_name].vars.pg_databases | selectattr('name', 'equalto', new_pg_database) | list)
+
     - name: Add new database to pigsty_config if not present
       ansible.builtin.set_fact:
         pigsty_config: "{{ pigsty_config | combine(
@@ -40,16 +67,7 @@
           }}}}},
           recursive=True
         ) }}"
-      vars:
-        new_db_entry:
-          name: "{{ new_pg_database }}"
-          owner: "{{ db_owner_user }}"
-          encoding: UTF8
-          lc_collate: en_US.UTF-8
-          lc_ctype: en_US.UTF-8
-          template: template0
-          state: present
-      when: not (pigsty_config.all.children[pg_cluster_name].vars.pg_databases | selectattr('name', 'equalto', new_pg_database) | list)
+      when: new_db_entry is defined # Only add if new_db_entry was prepared (i.e., database not already present)
 
     - name: Write updated pigsty.yml back to remote server
       ansible.builtin.copy:
