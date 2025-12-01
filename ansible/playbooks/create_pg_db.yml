@@ -34,10 +34,11 @@
 
     - name: Ensure pg_databases list exists for the cluster
       ansible.builtin.set_fact:
-        pigsty_config: "{{ pigsty_config | combine(
-          {'all': {'children': {pg_cluster_name: {'vars': {'pg_databases': []}}}}},
-          recursive=True
-        ) }}"
+        pigsty_config: |
+          {{ pigsty_config | combine(
+            {'all': {'children': {pg_cluster_name: {'vars': {'pg_databases': []}}}}},
+            recursive=True
+          ) }}
       when: pigsty_config.all.children[pg_cluster_name].vars.pg_databases is not defined
 
     - name: Prepare extensions list
@@ -61,12 +62,13 @@
 
     - name: Add new database to pigsty_config if not present
       ansible.builtin.set_fact:
-        pigsty_config: "{{ pigsty_config | combine(
-          {'all': {'children': {pg_cluster_name: {'vars': {'pg_databases':
-            (pigsty_config.all.children[pg_cluster_name].vars.pg_databases | default([])) + [new_db_entry]
-          }}}}},
-          recursive=True
-        ) }}"
+        pigsty_config: |
+          {{ pigsty_config | combine(
+            {'all': {'children': {pg_cluster_name: {'vars': {'pg_databases':
+              (pigsty_config.all.children[pg_cluster_name].vars.pg_databases | default([])) + [new_db_entry]
+            }}}}},
+            recursive=True
+          ) }}
       when: new_db_entry is defined # Only add if new_db_entry was prepared (i.e., database not already present)
 
     - name: Write updated pigsty.yml back to remote server
