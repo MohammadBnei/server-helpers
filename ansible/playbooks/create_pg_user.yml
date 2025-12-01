@@ -4,6 +4,7 @@
   vars:
     pigsty_config_path: "/home/mohammad/k8s-vms/pigsty/pigsty_git/pigsty.yml" # IMPORTANT: Set the actual path to pigsty.yml on dserver
     pg_cluster_name: "pg-meta" # Replace with your actual Pigsty cluster name
+    pigsty_install_dir: "{{ pigsty_config_path | dirname }}" # Derive install directory from config path
   vars_prompt:
     - name: "new_pg_user"
       prompt: "Enter the new PostgreSQL username to create"
@@ -47,7 +48,7 @@
       delegate_to: dserver
 
     - name: Run Pigsty deploy to apply changes
-      ansible.builtin.command: "ansible-playbook -i {{ pigsty_config_path }} /path/to/pigsty/deploy.yml" # IMPORTANT: Adjust path to Pigsty's deploy.yml
+      ansible.builtin.command: "ansible-playbook -i {{ pigsty_config_path }} {{ pigsty_install_dir }}/deploy.yml"
       args:
-        chdir: "/path/to/pigsty/installation/directory" # IMPORTANT: Adjust to Pigsty's installation directory
+        chdir: "{{ pigsty_install_dir }}"
       delegate_to: dserver
