@@ -13,9 +13,9 @@
       prompt: "Enter the password for the new PostgreSQL user"
       private: true # Keep this private for security
     - name: "pgbouncer_enabled"
-      prompt: "Enable PGBouncer for this user? (yes/no, default: no)"
+      prompt: "Enable PGBouncer for this user? (yes/no, default: yes)"
       private: false
-      default: "no"
+      default: "yes"
     - name: "conn_limit"
       prompt: "Enter connection limit for the user (-1 for no limit, default: -1)"
       private: false
@@ -50,10 +50,7 @@
     - name: Construct new user entry as a single YAML line
       ansible.builtin.set_fact:
         new_user_yaml_line: >-
-          - { name: "{{ new_pg_user }}", password: "{{ new_pg_password }}", state: present,
-          pgbouncer: {{ pgbouncer_enabled | lower == 'yes' }}, connlimit: {{ conn_limit | int }},
-          pool_connlimit: {{ pool_conn_limit | int }}, roles: {{ user_roles.split(',') | map('trim') | list | to_json }},
-          expire_in: {{ expire_days | int }} }
+          - { name: "{{ new_pg_user }}", password: "{{ new_pg_password }}", state: present, pgbouncer: {{ pgbouncer_enabled | lower == 'yes' }}, connlimit: {{ conn_limit | int }}, pool_connlimit: {{ pool_conn_limit | int }}, roles: {{ user_roles.split(',') | map('trim') | list | to_json }}, expire_in: {{ expire_days | int }} }
 
     - name: Insert new user entry into pigsty.yml
       ansible.builtin.lineinfile:
