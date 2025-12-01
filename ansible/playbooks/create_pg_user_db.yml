@@ -1,10 +1,9 @@
 ---
-- name: Create PostgreSQL user and database via pigsty.yml
+- name: Create PostgreSQL user and optionally a database via pigsty.yml
   hosts: dserver
   vars:
     pigsty_config_path: "/home/mohammad/k8s-vms/pigsty/pigsty_git/pigsty.yml" # IMPORTANT: Set the actual path to pigsty.yml on dserver
     pg_cluster_name: "pg-meta" # Replace with your actual Pigsty cluster name
-    # new_pg_user, new_pg_password, new_pg_database will be prompted
   vars_prompt:
     - name: "new_pg_user"
       prompt: "Enter the new PostgreSQL username to create"
@@ -12,16 +11,13 @@
     - name: "new_pg_password"
       prompt: "Enter the password for the new PostgreSQL user"
       private: true # Keep this private for security
-    - name: "new_pg_database"
-      prompt: "Enter the name for the new PostgreSQL database"
-      private: false
 
   tasks:
     - name: Read existing pigsty.yml from remote server
       ansible.builtin.slurp:
         src: "{{ pigsty_config_path }}"
       register: pigsty_yml_content
-      delegate_to: dserver # Ensure this runs on the target server
+      delegate_to: dserver
 
     - name: Decode pigsty.yml content
       ansible.builtin.set_fact:
@@ -43,7 +39,28 @@
         pigsty_config.all.vars.pg_users is not defined or
         not (pigsty_config.all.vars.pg_users | selectattr('name', 'equalto', new_pg_user) | list)
 
-    - name: Add new database to pigsty_config if not present
+    - name: Prompt to create a database
+      ansible.builtin.pause:
+        prompt: "Do you want to create a database for '{{ new_pg_user }}'? (yes/no)"
+      register: create_db_prompt
+
+    - name: Set fact for database creation decision
+      ansible.builtin.set_fact:
+        should_create_db: "{{ create_db_prompt.user_input | lower == 'yes' }}"
+
+    - name: Prompt for new database name if creating one
+      ansible.builtin.pause:
+        prompt: "Enter the name for the new PostgreSQL database (default: {{ new_pg_user }}_db)"
+        default: "{{ new_pg_user }}_db"
+      register: new_db_name_prompt
+      when: should_create_db
+
+    - name: Set fact for new database name
+      ansible.builtin.set_fact:
+        new_pg_database: "{{ new_db_name_prompt.user_input | default(new_pg_user + '_db') }}"
+      when: should_create_db
+
+    - name: Add new database to pigsty_config if not present and user opted in
       ansible.builtin.set_fact:
         pigsty_config: "{{ pigsty_config | combine({'all': {'vars': {'pg_databases': (pigsty_config.all.vars.pg_databases | default([])) + [new_db_entry]}}}) }}"
       vars:
@@ -56,18 +73,19 @@
           template: template0
           state: present
       when: >
-        pigsty_config.all.vars.pg_databases is not defined or
-        not (pigsty_config.all.vars.pg_databases | selectattr('name', 'equalto', new_pg_database) | list)
+        should_create_db and
+        (pigsty_config.all.vars.pg_databases is not defined or
+        not (pigsty_config.all.vars.pg_databases | selectattr('name', 'equalto', new_pg_database) | list))
 
     - name: Write updated pigsty.yml back to remote server
       ansible.builtin.copy:
         content: "{{ pigsty_config | to_yaml }}"
         dest: "{{ pigsty_config_path }}"
         mode: '0644'
-      delegate_to: dserver # Ensure this runs on the target server
+      delegate_to: dserver
 
     - name: Run Pigsty deploy to apply changes
       ansible.builtin.command: "ansible-playbook -i {{ pigsty_config_path }} /path/to/pigsty/deploy.yml" # IMPORTANT: Adjust path to Pigsty's deploy.yml
       args:
         chdir: "/path/to/pigsty/installation/directory" # IMPORTANT: Adjust to Pigsty's installation directory
-      delegate_to: dserver # Ensure this runs on the target server
+      delegate_to: dserver
