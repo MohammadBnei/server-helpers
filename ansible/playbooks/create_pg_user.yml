@@ -51,7 +51,7 @@
     - name: Construct new user entry as a single YAML line
       ansible.builtin.set_fact:
         new_user_yaml_line: >-
-          - { name: "{{ new_pg_user }}", password: "{{ new_pg_password }}", pgbouncer: {{ pgbouncer_enabled | lower == 'y' }}, connlimit: {{ conn_limit | int }}, pool_connlimit: {{ pool_conn_limit | int }}, roles: {{ user_roles.split(',') | map('trim') | list | to_json }}, expire_in: {{ expire_days | int }} }
+          - { name: "{{ new_pg_user }}", password: "{{ new_pg_password }}", pgbouncer: {{ (pgbouncer_enabled | lower == 'y') | to_json }}, connlimit: {{ conn_limit | int }}, pool_connlimit: {{ pool_conn_limit | int }}, roles: {{ user_roles.split(',') | map('trim') | list | to_json }}, expire_in: {{ expire_days | int }} }
 
     - name: Insert new user entry into pigsty.yml
       ansible.builtin.lineinfile:
