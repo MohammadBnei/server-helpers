@@ -1,0 +1,40 @@
+---
+- name: Create PostgreSQL user and database
+  hosts: dserver
+  become: yes
+  vars:
+    pg_cluster: "pg-test" # Replace with your actual Pigsty cluster name
+    new_pg_user: "my_app_user" # The new user to create
+    new_pg_password: "my_secure_password" # The password for the new user
+    new_pg_database: "my_app_db" # The new database to create
+
+  tasks:
+    - name: Ensure Pigsty is installed and configured
+      ansible.builtin.include_role:
+        name: pigsty.pigsty.config
+
+    - name: Create PostgreSQL user
+      ansible.builtin.include_role:
+        name: pigsty.pigsty.user
+      vars:
+        pg_users:
+          - name: "{{ new_pg_user }}"
+            password: "{{ new_pg_password }}"
+            state: present
+            roles:
+              - LOGIN
+              - CREATEDB
+              - REPLICATION
+
+    - name: Create PostgreSQL database
+      ansible.builtin.include_role:
+        name: pigsty.pigsty.database
+      vars:
+        pg_databases:
+          - name: "{{ new_pg_database }}"
+            owner: "{{ new_pg_user }}"
+            encoding: UTF8
+            lc_collate: en_US.UTF-8
+            lc_ctype: en_US.UTF-8
+            template: template0
+            state: present
