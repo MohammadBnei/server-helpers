@@ -12,6 +12,26 @@
     - name: "new_pg_password"
       prompt: "Enter the password for the new PostgreSQL user"
       private: true # Keep this private for security
+    - name: "pgbouncer_enabled"
+      prompt: "Enable PGBouncer for this user? (yes/no, default: no)"
+      private: false
+      default: "no"
+    - name: "conn_limit"
+      prompt: "Enter connection limit for the user (-1 for no limit, default: -1)"
+      private: false
+      default: "-1"
+    - name: "pool_conn_limit"
+      prompt: "Enter pool connection limit for the user (-1 for no limit, default: -1)"
+      private: false
+      default: "-1"
+    - name: "user_roles"
+      prompt: "Enter comma-separated roles for the user (e.g., dbrole_readwrite, default: dbrole_readwrite)"
+      private: false
+      default: "dbrole_readwrite"
+    - name: "expire_days"
+      prompt: "Enter days until user expires (e.g., 3650 for 10 years, 0 for no expiry, default: 0)"
+      private: false
+      default: "0"
 
   tasks:
     - name: Read existing pigsty.yml from remote server
@@ -32,6 +52,19 @@
         ) }}"
       when: pigsty_config.all.children[pg_cluster_name].vars.pg_users is not defined
 
+    - name: Prepare new user entry
+      ansible.builtin.set_fact:
+        new_user_entry:
+          name: "{{ new_pg_user }}"
+          password: "{{ new_pg_password }}"
+          state: present
+          pgbouncer: "{{ pgbouncer_enabled | lower == 'yes' }}"
+          connlimit: "{{ conn_limit | int }}"
+          pool_connlimit: "{{ pool_conn_limit | int }}"
+          roles: "{{ user_roles.split(',') | map('trim') | list }}"
+          expire_in: "{{ expire_days | int }}"
+      when: not (pigsty_config.all.children[pg_cluster_name].vars.pg_users | selectattr('name', 'equalto', new_pg_user) | list)
+
     - name: Add new user to pigsty_config if not present
       ansible.builtin.set_fact:
         pigsty_config: "{{ pigsty_config | combine(
@@ -40,16 +73,7 @@
           }}}}},
           recursive=True
         ) }}"
-      vars:
-        new_user_entry:
-          name: "{{ new_pg_user }}"
-          password: "{{ new_pg_password }}"
-          state: present
-          roles:
-            - LOGIN
-            - CREATEDB
-            - REPLICATION
-      when: not (pigsty_config.all.children[pg_cluster_name].vars.pg_users | selectattr('name', 'equalto', new_pg_user) | list)
+      when: new_user_entry is defined # Only add if new_user_entry was prepared (i.e., user not already present)
 
     - name: Write updated pigsty.yml back to remote server
       ansible.builtin.copy:
