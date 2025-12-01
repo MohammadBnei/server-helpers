@@ -82,8 +82,14 @@
         mode: '0644'
       delegate_to: dserver
 
+    - name: Prompt to run Pigsty deploy command
+      ansible.builtin.pause:
+        prompt: "pigsty.yml has been updated. Do you want to run the Pigsty deploy command to apply changes? (yes/no)"
+      register: run_deploy_prompt
+
     - name: Run Pigsty command to create user
       ansible.builtin.command: "bin/pgsql-user {{ pg_cluster_name }} {{ new_pg_user }}"
       args:
         chdir: "{{ pigsty_config_path }}"
       delegate_to: dserver
+      when: run_deploy_prompt.user_input | lower == 'yes'
