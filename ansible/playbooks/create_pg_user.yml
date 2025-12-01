@@ -38,7 +38,7 @@
       ansible.builtin.lineinfile:
         path: "{{ pigsty_file_location }}"
         regexp: '^- \{ name: "{{ new_pg_user }}"' # Regex to match the user entry
-        state: present
+        state: absent
       register: user_exists_check
       check_mode: yes # Do not make changes, just check
       delegate_to: dserver
