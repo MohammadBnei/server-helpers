@@ -8,13 +8,13 @@
   vars_prompt:
     - name: "new_pg_user"
       prompt: "Enter the new PostgreSQL username to create"
-      private: no
+      private: false
     - name: "new_pg_password"
       prompt: "Enter the password for the new PostgreSQL user"
-      private: yes # Keep this private for security
+      private: true # Keep this private for security
     - name: "new_pg_database"
       prompt: "Enter the name for the new PostgreSQL database"
-      private: no
+      private: false
 
   tasks:
     - name: Read existing pigsty.yml from remote server
