@@ -22,6 +22,14 @@
       default: ""
 
   tasks:
+    - name: Debug - Database input variables
+      ansible.builtin.debug:
+        msg:
+          - "New Database: {{ new_pg_database }}"
+          - "DB Owner: {{ db_owner_user }}"
+          - "DB Comment: {{ db_comment }}"
+          - "DB Extensions Input: {{ db_extensions_input }}"
+
     - name: Check if database '{{ new_pg_database }}' already exists in pigsty.yml
       ansible.builtin.shell: >
         grep -iq "name: {{ new_pg_database }}" {{ pigsty_file_location }}
@@ -29,6 +37,10 @@
       delegate_to: dserver
       changed_when: false
       failed_when: false # grep returns 1 if not found, which is not a failure for us
+
+    - name: Debug - Database existence check result
+      ansible.builtin.debug:
+        msg: "Database existence check RC: {{ db_exists_check.rc }}"
 
     - name: Fail if database already exists
       ansible.builtin.fail:
@@ -40,6 +52,11 @@
         parsed_extensions: "{{ db_extensions_input.split(',') | map('trim') | select('length') | map('community.general.dict_from_keys', ['name']) | list }}"
       when: db_extensions_input | length > 0
 
+    - name: Debug - Parsed extensions
+      ansible.builtin.debug:
+        msg: "Parsed Extensions: {{ parsed_extensions | default('None') }}"
+      when: db_extensions_input | length > 0
+
     - name: Construct new database entry as a single YAML line
       ansible.builtin.set_fact:
         new_db_yaml_line: >-
@@ -49,6 +66,10 @@
           template: template0, state: present
           {% if parsed_extensions is defined %}, extensions: {{ parsed_extensions | to_json }} {% endif %} }
 
+    - name: Debug - Constructed database YAML line
+      ansible.builtin.debug:
+        msg: "Constructed Database YAML Line: {{ new_db_yaml_line }}"
+
     - name: Insert new database entry into pigsty.yml
       ansible.builtin.lineinfile:
         path: "{{ pigsty_file_location }}"
@@ -57,11 +78,20 @@
         state: present
       delegate_to: dserver
 
+    - name: Debug - Lineinfile task result
+      ansible.builtin.debug:
+        var: ansible_results
+      when: ansible_verbosity > 1 # Only show detailed results if verbosity is higher
+
     - name: Prompt to run Pigsty deploy command
       ansible.builtin.pause:
         prompt: "pigsty.yml has been updated. Do you want to run the Pigsty deploy command to apply changes? (y/n) [n]"
         echo: true
       register: run_deploy_prompt
+
+    - name: Debug - Deploy prompt result
+      ansible.builtin.debug:
+        msg: "User chose to run deploy: {{ run_deploy_prompt.user_input | lower == 'y' }}"
 
     - name: Run Pigsty command to create database
       ansible.builtin.command: "bin/pgsql-db {{ pg_cluster_name }} {{ new_pg_database }}"
