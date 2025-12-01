@@ -29,6 +29,7 @@
           - "DB Owner: {{ db_owner_user }}"
           - "DB Comment: {{ db_comment }}"
           - "DB Extensions Input: {{ db_extensions_input }}"
+        verbosity: 1
 
     - name: Check if database '{{ new_pg_database }}' already exists in pigsty.yml
       ansible.builtin.shell: >
@@ -41,6 +42,7 @@
     - name: Debug - Database existence check result
       ansible.builtin.debug:
         msg: "Database existence check RC: {{ db_exists_check.rc }}"
+        verbosity: 1
 
     - name: Fail if database already exists
       ansible.builtin.fail:
@@ -55,12 +57,13 @@
     - name: Debug - Parsed extensions
       ansible.builtin.debug:
         msg: "Parsed Extensions: {{ parsed_extensions | default('None') }}"
+        verbosity: 1
       when: db_extensions_input | length > 0
 
     - name: Construct new database entry as a single YAML line
       ansible.builtin.set_fact:
         new_db_yaml_line: >-
-          - { name: "{{ new_pg_database }}", owner: "{{ db_owner_user }}",
+          - { name: {{ new_pg_database }}, owner: {{ db_owner_user }},
           comment: "{{ db_comment if db_comment | length > 0 else omit }}",
           encoding: UTF8, lc_collate: en_US.UTF-8, lc_ctype: en_US.UTF-8,
           template: template0, state: present
@@ -69,6 +72,7 @@
     - name: Debug - Constructed database YAML line
       ansible.builtin.debug:
         msg: "Constructed Database YAML Line: {{ new_db_yaml_line }}"
+        verbosity: 1
 
     - name: Insert new database entry into pigsty.yml
       ansible.builtin.lineinfile:
@@ -81,6 +85,7 @@
     - name: Debug - Lineinfile task result
       ansible.builtin.debug:
         var: ansible_results
+        verbosity: 1
       when: ansible_verbosity > 1 # Only show detailed results if verbosity is higher
 
     - name: Prompt to run Pigsty deploy command
@@ -92,6 +97,7 @@
     - name: Debug - Deploy prompt result
       ansible.builtin.debug:
         msg: "User chose to run deploy: {{ run_deploy_prompt.user_input | lower == 'y' }}"
+        verbosity: 1
 
     - name: Run Pigsty command to create database
       ansible.builtin.command: "bin/pgsql-db {{ pg_cluster_name }} {{ new_pg_database }}"
