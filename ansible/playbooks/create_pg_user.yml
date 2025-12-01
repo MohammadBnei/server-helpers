@@ -1,5 +1,5 @@
 ---
-- name: Create PostgreSQL user via pigsty.yml
+- name: Create PostgreSQL user via pigsty.yml (using lineinfile)
   hosts: dserver
   vars:
     pigsty_config_path: "/home/mohammad/k8s-vms/pigsty/pigsty_git" # Base path to Pigsty installation
@@ -34,54 +34,33 @@
       default: "0"
 
   tasks:
-    - name: Read existing pigsty.yml from remote server
-      ansible.builtin.slurp:
-        src: "{{ pigsty_file_location }}"
-      register: pigsty_yml_content
+    - name: Check if user '{{ new_pg_user }}' already exists in pigsty.yml
+      ansible.builtin.shell: |
+        grep -q "name: {{ new_pg_user }}" {{ pigsty_file_location }}
+      register: user_exists_check
       delegate_to: dserver
+      ignore_errors: true # grep returns non-zero if not found
+      changed_when: false
 
-    - name: Decode pigsty.yml content
+    - name: Fail if user already exists
+      ansible.builtin.fail:
+        msg: "User '{{ new_pg_user }}' already exists in {{ pigsty_file_location }}. Aborting."
+      when: user_exists_check.rc == 0
+
+    - name: Construct new user entry as a single YAML line
       ansible.builtin.set_fact:
-        pigsty_config: "{{ pigsty_yml_content['content'] | b64decode | from_yaml }}"
+        new_user_yaml_line: >-
+          - { name: "{{ new_pg_user }}", password: "{{ new_pg_password }}", state: present,
+          pgbouncer: {{ pgbouncer_enabled | lower == 'yes' }}, connlimit: {{ conn_limit | int }},
+          pool_connlimit: {{ pool_conn_limit | int }}, roles: {{ user_roles.split(',') | map('trim') | list | to_json }},
+          expire_in: {{ expire_days | int }} }
 
-    - name: Ensure pg_users list exists for the cluster
-      ansible.builtin.set_fact:
-        pigsty_config: |
-          {{ pigsty_config | combine(
-            {'all': {'children': {pg_cluster_name: {'vars': {'pg_users': []}}}}},
-            recursive=True
-          ) }}
-      when: pigsty_config.all.children[pg_cluster_name].vars.pg_users is not defined
-
-    - name: Prepare new user entry
-      ansible.builtin.set_fact:
-        new_user_entry:
-          name: "{{ new_pg_user }}"
-          password: "{{ new_pg_password }}"
-          state: present
-          pgbouncer: "{{ pgbouncer_enabled | lower == 'yes' }}"
-          connlimit: "{{ conn_limit | int }}"
-          pool_connlimit: "{{ pool_conn_limit | int }}"
-          roles: "{{ user_roles.split(',') | map('trim') | list }}"
-          expire_in: "{{ expire_days | int }}"
-      when: not (pigsty_config.all.children[pg_cluster_name].vars.pg_users | selectattr('name', 'equalto', new_pg_user) | list)
-
-    - name: Add new user to pigsty_config if not present
-      ansible.builtin.set_fact:
-        pigsty_config: |
-          {{ pigsty_config | combine(
-            {'all': {'children': {pg_cluster_name: {'vars': {'pg_users':
-              (pigsty_config.all.children[pg_cluster_name].vars.pg_users | default([])) + [new_user_entry]
-            }}}}},
-            recursive=True
-          ) }}
-      when: new_user_entry is defined # Only add if new_user_entry was prepared (i.e., user not already present)
-
-    - name: Write updated pigsty.yml back to remote server
-      ansible.builtin.copy:
-        content: "{{ pigsty_config | to_yaml }}"
-        dest: "{{ pigsty_file_location }}"
-        mode: '0644'
+    - name: Insert new user entry into pigsty.yml
+      ansible.builtin.lineinfile:
+        path: "{{ pigsty_file_location }}"
+        insertafter: "^\\s*pg_users:\\s*$" # Insert after the pg_users: line
+        line: "          {{ new_user_yaml_line }}" # Adjust indentation as needed
+        state: present
       delegate_to: dserver
 
     - name: Prompt to run Pigsty deploy command

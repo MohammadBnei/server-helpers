@@ -1,5 +1,5 @@
 ---
-- name: Create PostgreSQL database via pigsty.yml
+- name: Create PostgreSQL database via pigsty.yml (using lineinfile)
   hosts: dserver
   vars:
     pigsty_config_path: "/home/mohammad/k8s-vms/pigsty/pigsty_git" # Base path to Pigsty installation
@@ -22,60 +22,39 @@
       default: ""
 
   tasks:
-    - name: Read existing pigsty.yml from remote server
-      ansible.builtin.slurp:
-        src: "{{ pigsty_file_location }}"
-      register: pigsty_yml_content
+    - name: Check if database '{{ new_pg_database }}' already exists in pigsty.yml
+      ansible.builtin.shell: |
+        grep -q "name: {{ new_pg_database }}" {{ pigsty_file_location }}
+      register: db_exists_check
       delegate_to: dserver
+      ignore_errors: true # grep returns non-zero if not found
+      changed_when: false
 
-    - name: Decode pigsty.yml content
-      ansible.builtin.set_fact:
-        pigsty_config: "{{ pigsty_yml_content['content'] | b64decode | from_yaml }}"
-
-    - name: Ensure pg_databases list exists for the cluster
-      ansible.builtin.set_fact:
-        pigsty_config: |
-          {{ pigsty_config | combine(
-            {'all': {'children': {pg_cluster_name: {'vars': {'pg_databases': []}}}}},
-            recursive=True
-          ) }}
-      when: pigsty_config.all.children[pg_cluster_name].vars.pg_databases is not defined
+    - name: Fail if database already exists
+      ansible.builtin.fail:
+        msg: "Database '{{ new_pg_database }}' already exists in {{ pigsty_file_location }}. Aborting."
+      when: db_exists_check.rc == 0
 
     - name: Prepare extensions list
       ansible.builtin.set_fact:
         parsed_extensions: "{{ db_extensions_input.split(',') | map('trim') | select('length') | map('community.general.dict_from_keys', ['name']) | list }}"
       when: db_extensions_input | length > 0
 
-    - name: Prepare new database entry
+    - name: Construct new database entry as a single YAML line
       ansible.builtin.set_fact:
-        new_db_entry:
-          name: "{{ new_pg_database }}"
-          owner: "{{ db_owner_user }}"
-          comment: "{{ db_comment if db_comment | length > 0 else omit }}"
-          encoding: UTF8
-          lc_collate: en_US.UTF-8
-          lc_ctype: en_US.UTF-8
-          template: template0
-          state: present
-          extensions: "{{ parsed_extensions if parsed_extensions is defined else omit }}"
-      when: not (pigsty_config.all.children[pg_cluster_name].vars.pg_databases | selectattr('name', 'equalto', new_pg_database) | list)
+        new_db_yaml_line: >-
+          - { name: "{{ new_pg_database }}", owner: "{{ db_owner_user }}",
+          comment: "{{ db_comment if db_comment | length > 0 else omit }}",
+          encoding: UTF8, lc_collate: en_US.UTF-8, lc_ctype: en_US.UTF-8,
+          template: template0, state: present
+          {% if parsed_extensions is defined %}, extensions: {{ parsed_extensions | to_json }} {% endif %} }
 
-    - name: Add new database to pigsty_config if not present
-      ansible.builtin.set_fact:
-        pigsty_config: |
-          {{ pigsty_config | combine(
-            {'all': {'children': {pg_cluster_name: {'vars': {'pg_databases':
-              (pigsty_config.all.children[pg_cluster_name].vars.pg_databases | default([])) + [new_db_entry]
-            }}}}},
-            recursive=True
-          ) }}
-      when: new_db_entry is defined # Only add if new_db_entry was prepared (i.e., database not already present)
-
-    - name: Write updated pigsty.yml back to remote server
-      ansible.builtin.copy:
-        content: "{{ pigsty_config | to_yaml }}"
-        dest: "{{ pigsty_file_location }}"
-        mode: '0644'
+    - name: Insert new database entry into pigsty.yml
+      ansible.builtin.lineinfile:
+        path: "{{ pigsty_file_location }}"
+        insertafter: "^\\s*pg_databases:\\s*$" # Insert after the pg_databases: line
+        line: "          {{ new_db_yaml_line }}" # Adjust indentation as needed
+        state: present
       delegate_to: dserver
 
     - name: Prompt to run Pigsty deploy command
