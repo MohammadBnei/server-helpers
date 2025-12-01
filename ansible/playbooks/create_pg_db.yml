@@ -1,0 +1,53 @@
+---
+- name: Create PostgreSQL database via pigsty.yml
+  hosts: dserver
+  vars:
+    pigsty_config_path: "/home/mohammad/k8s-vms/pigsty/pigsty_git/pigsty.yml" # IMPORTANT: Set the actual path to pigsty.yml on dserver
+    pg_cluster_name: "pg-meta" # Replace with your actual Pigsty cluster name
+  vars_prompt:
+    - name: "new_pg_database"
+      prompt: "Enter the name for the new PostgreSQL database"
+      private: false
+    - name: "db_owner_user"
+      prompt: "Enter the owner username for the new PostgreSQL database (must exist)"
+      private: false
+
+  tasks:
+    - name: Read existing pigsty.yml from remote server
+      ansible.builtin.slurp:
+        src: "{{ pigsty_config_path }}"
+      register: pigsty_yml_content
+      delegate_to: dserver
+
+    - name: Decode pigsty.yml content
+      ansible.builtin.set_fact:
+        pigsty_config: "{{ pigsty_yml_content['content'] | b64decode | from_yaml }}"
+
+    - name: Add new database to pigsty_config if not present
+      ansible.builtin.set_fact:
+        pigsty_config: "{{ pigsty_config | combine({'all': {'vars': {'pg_databases': (pigsty_config.all.vars.pg_databases | default([])) + [new_db_entry]}}}) }}"
+      vars:
+        new_db_entry:
+          name: "{{ new_pg_database }}"
+          owner: "{{ db_owner_user }}"
+          encoding: UTF8
+          lc_collate: en_US.UTF-8
+          lc_ctype: en_US.UTF-8
+          template: template0
+          state: present
+      when: >
+        pigsty_config.all.vars.pg_databases is not defined or
+        not (pigsty_config.all.vars.pg_databases | selectattr('name', 'equalto', new_pg_database) | list)
+
+    - name: Write updated pigsty.yml back to remote server
+      ansible.builtin.copy:
+        content: "{{ pigsty_config | to_yaml }}"
+        dest: "{{ pigsty_config_path }}"
+        mode: '0644'
+      delegate_to: dserver
+
+    - name: Run Pigsty deploy to apply changes
+      ansible.builtin.command: "ansible-playbook -i {{ pigsty_config_path }} /path/to/pigsty/deploy.yml" # IMPORTANT: Adjust path to Pigsty's deploy.yml
+      args:
+        chdir: "/path/to/pigsty/installation/directory" # IMPORTANT: Adjust to Pigsty's installation directory
+      delegate_to: dserver
