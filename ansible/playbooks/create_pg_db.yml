@@ -23,16 +23,18 @@
 
   tasks:
     - name: Check if database '{{ new_pg_database }}' already exists in pigsty.yml
-      ansible.builtin.shell: |
-        grep -E '^- \\{ name: \"?{{ new_pg_database }}\"?' {{ pigsty_file_location }} > /dev/null && echo 'found' || echo 'not_found'"
-      register: db_exists_check_result
+      ansible.builtin.lineinfile:
+        path: "{{ pigsty_file_location }}"
+        regexp: '^- \{ name: "{{ new_pg_database }}"' # Regex to match the database entry
+        state: present
+      register: db_exists_check
+      check_mode: yes # Do not make changes, just check
       delegate_to: dserver
-      changed_when: false
 
     - name: Fail if database already exists
       ansible.builtin.fail:
         msg: "Database '{{ new_pg_database }}' already exists in {{ pigsty_file_location }}. Aborting."
-      when: db_exists_check_result.stdout == 'found'
+      when: db_exists_check.found
 
     - name: Prepare extensions list
       ansible.builtin.set_fact:
@@ -58,8 +60,7 @@
 
     - name: Prompt to run Pigsty deploy command
       ansible.builtin.pause:
-        prompt: "pigsty.yml has been updated. Do you want to run the Pigsty deploy command to apply changes? (y/n)"
-        default: "n"
+        prompt: "pigsty.yml has been updated. Do you want to run the Pigsty deploy command to apply changes? (y/n) [n]"
         echo: true
       register: run_deploy_prompt
 
