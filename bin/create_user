@@ -4,8 +4,8 @@
 # It passes all arguments directly to ansible-playbook.
 
 SCRIPT_DIR=$(dirname "$0")
-ANSIBLE_DIR="${SCRIPT_DIR}/../ansible"
-PLAYBOOK="${ANSIBLE_DIR}/playbooks/create_pg_user.yml"
+ANSIBLE_DIR="./ansible"
+PLAYBOOK="playbooks/create_pg_user.yml"
 
 echo "Running Ansible playbook: ${PLAYBOOK}"
 echo "Arguments: $@"
