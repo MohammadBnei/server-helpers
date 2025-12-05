@@ -49,9 +49,27 @@
         msg: "Database '{{ new_pg_database }}' already exists in {{ pigsty_file_location }}. Aborting."
       when: db_exists_check.rc == 0 # rc=0 means grep found the pattern
 
+    - name: Check if user '{{ db_owner_user }}' already exists in pigsty.yml
+      ansible.builtin.shell: >
+        grep -iq "name: {{ db_owner_user }}" {{ pigsty_file_location }}
+      register: user_exists_check
+      delegate_to: dserver
+      changed_when: false
+      failed_when: false # grep returns 1 if not found, which is not a failure for us
+
+    - name: Debug - User existence check result
+      ansible.builtin.debug:
+        msg: "User existence check RC: {{ user_exists_check.rc }}"
+        verbosity: 1
+
+    - name: Fail if user already exists
+      ansible.builtin.fail:
+        msg: "User '{{ db_owner_user }}' doesn't exists in {{ pigsty_file_location }}. Aborting."
+      when: user_exists_check.rc == 1 # rc=0 means grep found the pattern
+
     - name: Prepare extensions list
       ansible.builtin.set_fact:
-        parsed_extensions: "{{ db_extensions_input.split(',') | map('trim') | select('length') | map('community.general.dict_from_keys', ['name']) | list }}"
+        parsed_extensions: "{{ db_extensions_input.split(',') | map('trim') | unique | map('regex_replace', '^(.*)$', '{\"name\": \"\\1\"}') | map('from_json') | ansible.builtin.to_json(indent=2) }}"
       when: db_extensions_input | length > 0
 
     - name: Debug - Parsed extensions
@@ -64,9 +82,7 @@
       ansible.builtin.set_fact:
         new_db_yaml_line: >-
           - { name: {{ new_pg_database }}, owner: {{ db_owner_user }},
-          comment: "{{ db_comment if db_comment | length > 0 else omit }}",
-          encoding: UTF8, lc_collate: en_US.UTF-8, lc_ctype: en_US.UTF-8,
-          template: template0, state: present
+          comment: "{{ db_comment if db_comment | length > 0 else omit }}"
           {% if parsed_extensions is defined %}, extensions: {{ parsed_extensions | to_json }} {% endif %} }
 
     - name: Debug - Constructed database YAML line
