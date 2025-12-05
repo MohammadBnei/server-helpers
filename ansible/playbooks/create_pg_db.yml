@@ -72,7 +72,7 @@
         new_db_yaml_line: >-
           - { name: {{ new_pg_database }}, owner: {{ db_owner_user }},
           comment: "{{ db_comment if db_comment | length > 0 else omit }}"
-          {% if db_extensions_input | length > 0 %}, extensions: [{{ db_extensions_input | split(',') | map('trim') | join(', ') }}] {% endif %} }
+          {% if db_extensions_input | length > 0 %}, extensions: [{{ db_extensions_input | split(',') | map('trim') | map('regex_replace', '^(.*)$', '{ name: "\\1" }') | join(', ') }}] {% endif %} }
 
     - name: Debug - Constructed database YAML line
       ansible.builtin.debug:
