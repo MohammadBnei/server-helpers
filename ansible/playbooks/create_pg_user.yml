@@ -47,7 +47,7 @@
 
     - name: Check if user '{{ new_pg_user }}' already exists in pigsty.yml
       ansible.builtin.shell: >
-        grep -iq "name: \"{{ new_pg_user }}\"" {{ pigsty_file_location }}
+        grep -iq "name: {{ new_pg_user }}" {{ pigsty_file_location }}
       register: user_exists_check
       delegate_to: dserver
       changed_when: false
