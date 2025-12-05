@@ -67,23 +67,12 @@
         msg: "User '{{ db_owner_user }}' doesn't exists in {{ pigsty_file_location }}. Aborting."
       when: user_exists_check.rc == 1 # rc=0 means grep found the pattern
 
-    - name: Prepare extensions list
-      ansible.builtin.set_fact:
-        parsed_extensions: "{{ db_extensions_input.split(',') | map('trim') | unique | map('regex_replace', '^(.*)$', '{\"name\": \"\\1\"}') | map('from_json') | ansible.builtin.to_json(indent=2) }}"
-      when: db_extensions_input | length > 0
-
-    - name: Debug - Parsed extensions
-      ansible.builtin.debug:
-        msg: "Parsed Extensions: {{ parsed_extensions | default('None') }}"
-        verbosity: 1
-      when: db_extensions_input | length > 0
-
     - name: Construct new database entry as a single YAML line
       ansible.builtin.set_fact:
         new_db_yaml_line: >-
           - { name: {{ new_pg_database }}, owner: {{ db_owner_user }},
           comment: "{{ db_comment if db_comment | length > 0 else omit }}"
-          {% if parsed_extensions is defined %}, extensions: {{ parsed_extensions | to_json }} {% endif %} }
+          {% if db_extensions_input | length > 0 %}, extensions: [{{ db_extensions_input | split(',') | map('trim') | join(', ') }}] {% endif %} }
 
     - name: Debug - Constructed database YAML line
       ansible.builtin.debug:
